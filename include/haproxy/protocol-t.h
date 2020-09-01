@@ -72,7 +72,7 @@ struct protocol {
 	socklen_t sock_addrlen;				/* socket address length, used by bind() */
 	int l3_addrlen;					/* layer3 address length, used by hashes */
 	void (*accept)(int fd);				/* generic accept function */
-	int (*bind)(struct listener *l, char *errmsg, int errlen); /* bind a listener */
+	int (*listen)(struct listener *l, char *errmsg, int errlen); /* start a listener */
 	int (*bind_all)(struct protocol *proto, char *errmsg, int errlen); /* bind all unbound listeners */
 	int (*unbind_all)(struct protocol *proto);	/* unbind all bound listeners */
 	int (*enable_all)(struct protocol *proto);	/* enable all bound listeners */
