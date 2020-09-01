@@ -572,6 +572,19 @@ int tcp_bind_listener(struct listener *listener, char *errmsg, int errlen)
 	if (listener->rx.options & RX_O_BOUND)
 		goto bound;
 
+	if (listener->options & LI_O_FOREIGN)
+		listener->rx.options |= RX_O_FOREIGN;
+
+	if (listener->rx.addr.ss_family == AF_INET6) {
+		/* Prepare to match the v6only option against what we really want. Note
+		 * that sadly the two options are not exclusive to each other and that
+		 * v6only is stronger than v4v6.
+		 */
+		if ((listener->options & LI_O_V6ONLY) ||
+		    (sock_inet6_v6only_default && !(listener->options & LI_O_V4V6)))
+			listener->rx.options |= RX_O_V6ONLY;
+	}
+
 	if (listener->rx.fd == -1)
 		listener->rx.fd = sock_find_compatible_fd(listener);
 
