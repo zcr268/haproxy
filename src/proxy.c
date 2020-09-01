@@ -1417,7 +1417,7 @@ void stop_proxy(struct proxy *p)
 			continue;
 		}
 		/* The master should not close an inherited FD */
-		if (master && (l->options & LI_O_INHERITED))
+		if (master && (l->rx.options & RX_O_INHERITED))
 			unbind_listener_no_close(l);
 		else
 			unbind_listener(l);
