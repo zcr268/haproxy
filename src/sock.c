@@ -347,7 +347,7 @@ out:
 	return (ret2);
 }
 
-/* When binding the listeners, check if a socket has been sent to us by the
+/* When binding the receivers, check if a socket has been sent to us by the
  * previous process that we could reuse, instead of creating a new one. Note
  * that some address family-specific options are checked on the listener and
  * on the socket. Typically for AF_INET and AF_INET6, we check for transparent
@@ -355,7 +355,7 @@ out:
  * socket is automatically removed from the list so that it's not proposed
  * anymore.
  */
-int sock_find_compatible_fd(const struct listener *l)
+int sock_find_compatible_fd(const struct receiver *rx)
 {
 	struct xfer_sock_list *xfer_sock = xfer_sock_list;
 	int options = 0;
@@ -363,37 +363,37 @@ int sock_find_compatible_fd(const struct listener *l)
 	int ns_namelen = 0;
 	int ret = -1;
 
-	if (!l->rx.proto->addrcmp)
+	if (!rx->proto->addrcmp)
 		return -1;
 
 	/* WT: this is not the right way to do it, it is temporary for the
 	 *     transition to receivers.
 	 */
-	if (l->rx.addr.ss_family == AF_CUST_UDP4 || l->rx.addr.ss_family == AF_CUST_UDP6)
+	if (rx->addr.ss_family == AF_CUST_UDP4 || rx->addr.ss_family == AF_CUST_UDP6)
 		options |= SOCK_XFER_OPT_DGRAM;
 
-	if (l->rx.options & RX_O_FOREIGN)
+	if (rx->options & RX_O_FOREIGN)
 		options |= SOCK_XFER_OPT_FOREIGN;
 
-	if (l->rx.options & RX_O_V6ONLY)
+	if (rx->options & RX_O_V6ONLY)
 		options |= SOCK_XFER_OPT_V6ONLY;
 
-	if (l->rx.interface)
-		if_namelen = strlen(l->rx.interface);
+	if (rx->interface)
+		if_namelen = strlen(rx->interface);
 #ifdef USE_NS
-	if (l->rx.netns)
-		ns_namelen = l->rx.netns->name_len;
+	if (rx->netns)
+		ns_namelen = rx->netns->name_len;
 #endif
 
 	while (xfer_sock) {
 		if ((options == xfer_sock->options) &&
 		    (if_namelen == xfer_sock->if_namelen) &&
 		    (ns_namelen == xfer_sock->ns_namelen) &&
-		    (!if_namelen || strcmp(l->rx.interface, xfer_sock->iface) == 0) &&
+		    (!if_namelen || strcmp(rx->interface, xfer_sock->iface) == 0) &&
 #ifdef USE_NS
-		    (!ns_namelen || strcmp(l->rx.netns->node.key, xfer_sock->namespace) == 0) &&
+		    (!ns_namelen || strcmp(rx->netns->node.key, xfer_sock->namespace) == 0) &&
 #endif
-		    l->rx.proto->addrcmp(&xfer_sock->addr, &l->rx.addr) == 0)
+		    rx->proto->addrcmp(&xfer_sock->addr, &rx->addr) == 0)
 			break;
 		xfer_sock = xfer_sock->next;
 	}
