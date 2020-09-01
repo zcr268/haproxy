@@ -29,7 +29,8 @@
 
 #include <haproxy/api-t.h>
 #include <haproxy/obj_type-t.h>
-#include <haproxy/thread.h>
+#include <haproxy/receiver-t.h>
+#include <haproxy/thread-t.h>
 
 #ifdef USE_OPENSSL
 #include <haproxy/openssl-compat.h>
@@ -185,18 +186,6 @@ struct bind_conf {
 		gid_t gid;         /* -1 to leave unchanged */
 		mode_t mode;       /* 0 to leave unchanged */
 	} ux;
-};
-
-/* This describes a receiver with all its characteristics (address, options, etc) */
-struct receiver {
-	int fd;                          /* handle we receive from (fd only for now) */
-	int options;                     /* receiver options (RX_O_*) */
-	struct protocol *proto;          /* protocol this receiver belongs to */
-	struct list proto_list;          /* list in the protocol header */
-	char *interface;                 /* interface name or NULL */
-	const struct netns_entry *netns; /* network namespace of the receiving socket */
-	/* warning: this struct is huge, keep it at the bottom */
-	struct sockaddr_storage addr;    /* the address the socket is bound to */
 };
 
 /* The listener will be directly referenced by the fdtab[] which holds its
