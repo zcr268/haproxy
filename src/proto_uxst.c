@@ -58,7 +58,6 @@ static struct protocol proto_unix = {
 	.accept = &listener_accept,
 	.connect = &uxst_connect_server,
 	.bind = uxst_bind_listener,
-	.unbind_all = uxst_unbind_listeners,
 	.enable_all = enable_all_listeners,
 	.disable_all = disable_all_listeners,
 	.get_src = sock_get_src,
@@ -298,17 +297,6 @@ static int uxst_bind_listener(struct listener *listener, char *errmsg, int errle
 	return err;
 }
 
-/* This function closes the UNIX sockets for the specified listener.
- * The listener enters the LI_ASSIGNED state. It always returns ERR_NONE.
- */
-static int uxst_unbind_listener(struct listener *listener)
-{
-	if (listener->state > LI_ASSIGNED) {
-		unbind_listener(listener);
-	}
-	return ERR_NONE;
-}
-
 /* Add <listener> to the list of unix stream listeners (port is ignored). The
  * listener's state is automatically updated from LI_INIT to LI_ASSIGNED.
  * The number of listeners for the protocol is updated.
@@ -521,28 +509,6 @@ static int uxst_connect_server(struct connection *conn, int flags)
 	}
 
 	return SF_ERR_NONE;  /* connection is OK */
-}
-
-
-/********************************
- * 3) protocol-oriented functions
- ********************************/
-
-
-/* This function stops all listening UNIX sockets bound to the protocol
- * <proto>. It does not detaches them from the protocol.
- * It always returns ERR_NONE.
- *
- * Must be called with proto_lock held.
- *
- */
-static int uxst_unbind_listeners(struct protocol *proto)
-{
-	struct listener *listener;
-
-	list_for_each_entry(listener, &proto->listeners, rx.proto_list)
-		uxst_unbind_listener(listener);
-	return ERR_NONE;
 }
 
 /*
