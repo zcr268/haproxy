@@ -29,6 +29,9 @@
 #include <haproxy/namespace-t.h>
 #include <haproxy/thread.h>
 
+/* Bit values for receiver->options */
+#define RX_O_BOUND              0x00000001  /* receiver already bound */
+
 /* This describes a receiver with all its characteristics (address, options, etc) */
 struct receiver {
 	int fd;                          /* handle we receive from (fd only for now) */

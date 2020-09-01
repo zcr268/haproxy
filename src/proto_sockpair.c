@@ -132,6 +132,9 @@ static int sockpair_bind_listener(struct listener *listener, char *errmsg, int e
 	if (listener->state != LI_ASSIGNED)
 		return ERR_NONE; /* already bound */
 
+	if (listener->rx.options & RX_O_BOUND)
+		goto bound;
+
 	if (listener->rx.fd == -1) {
 		err |= ERR_FATAL | ERR_ALERT;
 		msg = "sockpair can be only used with inherited FDs";
@@ -148,7 +151,9 @@ static int sockpair_bind_listener(struct listener *listener, char *errmsg, int e
 		msg = "cannot make sockpair non-blocking";
 		goto err_return;
 	}
+	listener->rx.options |= RX_O_BOUND;
 
+ bound:
 	listener->state = LI_LISTEN;
 
 	fd_insert(fd, listener, listener->rx.proto->accept,
