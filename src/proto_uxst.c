@@ -270,7 +270,7 @@ static int uxst_bind_listener(struct listener *listener, char *errmsg, int errle
 	          thread_mask(listener->bind_conf->bind_thread) & all_threads_mask);
 
 	/* for now, all regularly bound UNIX listeners are exportable */
-	if (!(listener->options & LI_O_INHERITED))
+	if (!(listener->rx.options & RX_O_INHERITED))
 		fdtab[fd].exported = 1;
 
 	return err;

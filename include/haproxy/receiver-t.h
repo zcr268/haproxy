@@ -31,6 +31,7 @@
 
 /* Bit values for receiver->options */
 #define RX_O_BOUND              0x00000001  /* receiver already bound */
+#define RX_O_INHERITED          0x00000002  /* inherited FD from the parent process (fd@) */
 
 /* This describes a receiver with all its characteristics (address, options, etc) */
 struct receiver {
