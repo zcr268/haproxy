@@ -59,7 +59,7 @@ struct connection;
 
 /* This structure contains all information needed to easily handle a protocol.
  * Its primary goal is to ease listeners maintenance. Specifically, the
- * bind_all() primitive must be used before any fork(), and the enable_all()
+ * bind() primitive must be used before any fork(), and the enable_all()
  * primitive must be called after the fork() to enable all fds. Last, the
  * unbind_all() primitive closes all listeners.
  */
@@ -73,7 +73,6 @@ struct protocol {
 	int l3_addrlen;					/* layer3 address length, used by hashes */
 	void (*accept)(int fd);				/* generic accept function */
 	int (*bind)(struct listener *l, char *errmsg, int errlen); /* bind a listener */
-	int (*bind_all)(struct protocol *proto, char *errmsg, int errlen); /* bind all unbound listeners */
 	int (*unbind_all)(struct protocol *proto);	/* unbind all bound listeners */
 	int (*enable_all)(struct protocol *proto);	/* enable all bound listeners */
 	int (*disable_all)(struct protocol *proto);	/* disable all bound listeners */

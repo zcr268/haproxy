@@ -41,7 +41,6 @@
 
 
 static int uxst_bind_listener(struct listener *listener, char *errmsg, int errlen);
-static int uxst_bind_listeners(struct protocol *proto, char *errmsg, int errlen);
 static int uxst_unbind_listeners(struct protocol *proto);
 static int uxst_connect_server(struct connection *conn, int flags);
 static void uxst_add_listener(struct listener *listener, int port);
@@ -59,7 +58,6 @@ static struct protocol proto_unix = {
 	.accept = &listener_accept,
 	.connect = &uxst_connect_server,
 	.bind = uxst_bind_listener,
-	.bind_all = uxst_bind_listeners,
 	.unbind_all = uxst_unbind_listeners,
 	.enable_all = enable_all_listeners,
 	.disable_all = disable_all_listeners,
@@ -529,30 +527,6 @@ static int uxst_connect_server(struct connection *conn, int flags)
 /********************************
  * 3) protocol-oriented functions
  ********************************/
-
-
-/* This function creates all UNIX sockets bound to the protocol entry <proto>.
- * It is intended to be used as the protocol's bind_all() function.
- * The sockets will be registered but not added to any fd_set, in order not to
- * loose them across the fork(). A call to uxst_enable_listeners() is needed
- * to complete initialization.
- *
- * Must be called with proto_lock held.
- *
- * The return value is composed from ERR_NONE, ERR_RETRYABLE and ERR_FATAL.
- */
-static int uxst_bind_listeners(struct protocol *proto, char *errmsg, int errlen)
-{
-	struct listener *listener;
-	int err = ERR_NONE;
-
-	list_for_each_entry(listener, &proto->listeners, rx.proto_list) {
-		err |= uxst_bind_listener(listener, errmsg, errlen);
-		if (err & ERR_ABORT)
-			break;
-	}
-	return err;
-}
 
 
 /* This function stops all listening UNIX sockets bound to the protocol
