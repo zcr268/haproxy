@@ -103,13 +103,9 @@ static int uxst_bind_listener(struct listener *listener, char *errmsg, int errle
 	if (listener->state != LI_ASSIGNED)
 		return ERR_NONE; /* already bound */
 
-	err = sock_unix_bind_receiver(&listener->rx,
-	                              listener->rx.proto->accept, listener,
-	                              listener->bind_conf->bind_thread, &msg);
-	if (err != ERR_NONE) {
-		snprintf(errmsg, errlen, "%s", msg);
-		free(msg); msg = NULL;
-		return err;
+	if (!(listener->rx.options & RX_O_BOUND)) {
+		msg = "receiving socket not bound";
+		goto uxst_close_return;
 	}
 
 	fd = listener->rx.fd;
