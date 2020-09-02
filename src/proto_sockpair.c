@@ -35,6 +35,7 @@
 #include <haproxy/list.h>
 #include <haproxy/listener.h>
 #include <haproxy/protocol.h>
+#include <haproxy/proto_sockpair.h>
 #include <haproxy/time.h>
 #include <haproxy/tools.h>
 #include <haproxy/version.h>
@@ -55,6 +56,7 @@ static struct protocol proto_sockpair = {
 	.l3_addrlen = sizeof(((struct sockaddr_un*)0)->sun_path),/* path len */
 	.accept = &listener_accept,
 	.connect = &sockpair_connect_server,
+	.bind = sockpair_bind_receiver,
 	.listen = sockpair_bind_listener,
 	.enable_all = enable_all_listeners,
 	.disable_all = disable_all_listeners,
@@ -83,6 +85,63 @@ static void sockpair_add_listener(struct listener *listener, int port)
 	listener->rx.proto = &proto_sockpair;
 	LIST_ADDQ(&proto_sockpair.listeners, &listener->rx.proto_list);
 	proto_sockpair.nb_listeners++;
+}
+
+/* Binds receiver <rx>, and assigns <handler> and <owner> as the callback and
+ * context, respectively, with <tm> as the thread mask. Returns and error code
+ * made of ERR_* bits on failure or ERR_NONE on success. On failure, an error
+ * message may be passed into <errmsg>. Note that the binding address is only
+ * an FD to receive the incoming FDs on. Thus by definition there is no real
+ * "bind" operation, this only completes the receiver. Such FDs are not
+ * inherited upon reload.
+ */
+int sockpair_bind_receiver(struct receiver *rx, void (*handler)(int fd), void *owner, long tm, char **errmsg)
+{
+	int fd, err;
+
+	/* ensure we never return garbage */
+	if (errmsg)
+		*errmsg = 0;
+
+	err = ERR_NONE;
+
+	if (rx->options & RX_O_BOUND)
+		return ERR_NONE;
+
+	if (rx->fd == -1) {
+		err |= ERR_FATAL | ERR_ALERT;
+		memprintf(errmsg, "sockpair may be only used with inherited FDs");
+		goto bind_return;
+	}
+
+	fd = rx->fd;
+
+	if (fd >= global.maxsock) {
+		err |= ERR_FATAL | ERR_ABORT | ERR_ALERT;
+		memprintf(errmsg, "not enough free sockets (raise '-n' parameter)");
+		goto bind_close_return;
+	}
+
+	if (fcntl(fd, F_SETFL, O_NONBLOCK) == -1) {
+		err |= ERR_FATAL | ERR_ALERT;
+		memprintf(errmsg, "cannot make socket non-blocking");
+		goto bind_close_return;
+	}
+
+	rx->options |= RX_O_BOUND;
+
+	fd_insert(fd, owner, handler, thread_mask(tm) & all_threads_mask);
+	return err;
+
+ bind_return:
+	if (errmsg && *errmsg)
+		memprintf(errmsg, "%s [fd %d]", *errmsg, fd);
+
+	return err;
+
+ bind_close_return:
+	close(fd);
+	goto bind_return;
 }
 
 /* This function changes the state from ASSIGNED to LISTEN. The socket is NOT
