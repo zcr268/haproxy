@@ -181,11 +181,6 @@ struct bind_conf {
 	char *arg;                 /* argument passed to "bind" for better error reporting */
 	char *file;                /* file where the section appears */
 	int line;                  /* line where the section appears */
-	struct {                   /* UNIX socket permissions */
-		uid_t uid;         /* -1 to leave unchanged */
-		gid_t gid;         /* -1 to leave unchanged */
-		mode_t mode;       /* 0 to leave unchanged */
-	} ux;
 };
 
 /* The listener will be directly referenced by the fdtab[] which holds its

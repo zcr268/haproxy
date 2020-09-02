@@ -564,6 +564,10 @@ int create_listeners(struct bind_conf *bc, const struct sockaddr_storage *ss,
 		LIST_ADDQ(&bc->listeners, &l->by_bind);
 		l->bind_conf = bc;
 
+		/* use default settings for unix sockets */
+		l->rx.ux.uid  = global.unix_bind.ux.uid;
+		l->rx.ux.gid  = global.unix_bind.ux.gid;
+		l->rx.ux.mode = global.unix_bind.ux.mode;
 		l->rx.fd = fd;
 		memcpy(&l->rx.addr, ss, sizeof(*ss));
 		MT_LIST_INIT(&l->wait_queue);

@@ -564,11 +564,6 @@ int cfg_parse_listen(const char *file, int linenum, char **args, int kwm)
 
 		bind_conf = bind_conf_alloc(curproxy, file, linenum, args[1], xprt_get(XPRT_RAW));
 
-		/* use default settings for unix sockets */
-		bind_conf->ux.uid  = global.unix_bind.ux.uid;
-		bind_conf->ux.gid  = global.unix_bind.ux.gid;
-		bind_conf->ux.mode = global.unix_bind.ux.mode;
-
 		/* NOTE: the following line might create several listeners if there
 		 * are comma-separated IPs or port ranges. So all further processing
 		 * will have to be applied to all listeners created after last_listen.

@@ -37,6 +37,11 @@ struct receiver {
 	struct list proto_list;          /* list in the protocol header */
 	char *interface;                 /* interface name or NULL */
 	const struct netns_entry *netns; /* network namespace of the receiving socket */
+	struct {                         /* UNIX socket permissions */
+		uid_t uid;               /* -1 to leave unchanged */
+		gid_t gid;               /* -1 to leave unchanged */
+		mode_t mode;             /* 0 to leave unchanged */
+	} ux;
 	/* warning: this struct is huge, keep it at the bottom */
 	struct sockaddr_storage addr;    /* the address the socket is bound to */
 };

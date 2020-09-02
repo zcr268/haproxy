@@ -41,13 +41,20 @@
 /* parse the "mode" bind keyword */
 static int bind_parse_mode(char **args, int cur_arg, struct proxy *px, struct bind_conf *conf, char **err)
 {
+	struct listener *l;
+	mode_t mode;
 	char *endptr;
 
-	conf->ux.mode = strtol(args[cur_arg + 1], &endptr, 8);
+	mode = strtol(args[cur_arg + 1], &endptr, 8);
 
 	if (!*args[cur_arg + 1] || *endptr) {
 		memprintf(err, "'%s' : missing or invalid mode '%s' (octal integer expected)", args[cur_arg], args[cur_arg + 1]);
 		return ERR_ALERT | ERR_FATAL;
+	}
+
+	list_for_each_entry(l, &conf->listeners, by_bind) {
+		if (l->rx.addr.ss_family == AF_UNIX)
+			l->rx.ux.mode = mode;
 	}
 
 	return 0;
@@ -56,18 +63,26 @@ static int bind_parse_mode(char **args, int cur_arg, struct proxy *px, struct bi
 /* parse the "gid" bind keyword */
 static int bind_parse_gid(char **args, int cur_arg, struct proxy *px, struct bind_conf *conf, char **err)
 {
+	struct listener *l;
+	gid_t gid;
+
 	if (!*args[cur_arg + 1]) {
 		memprintf(err, "'%s' : missing value", args[cur_arg]);
 		return ERR_ALERT | ERR_FATAL;
 	}
 
-	conf->ux.gid = atol(args[cur_arg + 1]);
+	gid = atol(args[cur_arg + 1]);
+	list_for_each_entry(l, &conf->listeners, by_bind) {
+		if (l->rx.addr.ss_family == AF_UNIX)
+			l->rx.ux.gid = gid;
+	}
 	return 0;
 }
 
 /* parse the "group" bind keyword */
 static int bind_parse_group(char **args, int cur_arg, struct proxy *px, struct bind_conf *conf, char **err)
 {
+	struct listener *l;
 	struct group *group;
 
 	if (!*args[cur_arg + 1]) {
@@ -81,25 +96,36 @@ static int bind_parse_group(char **args, int cur_arg, struct proxy *px, struct b
 		return ERR_ALERT | ERR_FATAL;
 	}
 
-	conf->ux.gid = group->gr_gid;
+	list_for_each_entry(l, &conf->listeners, by_bind) {
+		if (l->rx.addr.ss_family == AF_UNIX)
+			l->rx.ux.gid = group->gr_gid;
+	}
 	return 0;
 }
 
 /* parse the "uid" bind keyword */
 static int bind_parse_uid(char **args, int cur_arg, struct proxy *px, struct bind_conf *conf, char **err)
 {
+	struct listener *l;
+	uid_t uid;
+
 	if (!*args[cur_arg + 1]) {
 		memprintf(err, "'%s' : missing value", args[cur_arg]);
 		return ERR_ALERT | ERR_FATAL;
 	}
 
-	conf->ux.uid = atol(args[cur_arg + 1]);
+	uid = atol(args[cur_arg + 1]);
+	list_for_each_entry(l, &conf->listeners, by_bind) {
+		if (l->rx.addr.ss_family == AF_UNIX)
+			l->rx.ux.uid = uid;
+	}
 	return 0;
 }
 
 /* parse the "user" bind keyword */
 static int bind_parse_user(char **args, int cur_arg, struct proxy *px, struct bind_conf *conf, char **err)
 {
+	struct listener *l;
 	struct passwd *user;
 
 	if (!*args[cur_arg + 1]) {
@@ -113,7 +139,10 @@ static int bind_parse_user(char **args, int cur_arg, struct proxy *px, struct bi
 		return ERR_ALERT | ERR_FATAL;
 	}
 
-	conf->ux.uid = user->pw_uid;
+	list_for_each_entry(l, &conf->listeners, by_bind) {
+		if (l->rx.addr.ss_family == AF_UNIX)
+			l->rx.ux.uid = user->pw_uid;
+	}
 	return 0;
 }
 
