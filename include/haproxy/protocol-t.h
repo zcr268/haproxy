@@ -30,8 +30,8 @@
 
 /* some pointer types referenced below */
 struct listener;
+struct receiver;
 struct connection;
-
 /*
  * Custom network family for str2sa parsing.  Should be ok to do this since
  * sa_family_t is standardized as an unsigned integer
@@ -71,6 +71,7 @@ struct protocol {
 	socklen_t sock_addrlen;				/* socket address length, used by bind() */
 	int l3_addrlen;					/* layer3 address length, used by hashes */
 	void (*accept)(int fd);				/* generic accept function */
+	int (*bind)(struct receiver *rx, void (*handler)(int fd), void *owner, long tm, char **errmsg); /* bind a receiver */
 	int (*listen)(struct listener *l, char *errmsg, int errlen); /* start a listener */
 	int (*enable_all)(struct protocol *proto);	/* enable all bound listeners */
 	int (*disable_all)(struct protocol *proto);	/* disable all bound listeners */
