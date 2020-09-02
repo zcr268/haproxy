@@ -152,9 +152,8 @@ int sockpair_bind_receiver(struct receiver *rx, void (*handler)(int fd), void *o
  */
 static int sockpair_bind_listener(struct listener *listener, char *errmsg, int errlen)
 {
-	int fd = listener->rx.fd;
 	int err;
-	const char *msg = NULL;
+	char *msg = NULL;
 
 	err = ERR_NONE;
 
@@ -165,38 +164,21 @@ static int sockpair_bind_listener(struct listener *listener, char *errmsg, int e
 	if (listener->state != LI_ASSIGNED)
 		return ERR_NONE; /* already bound */
 
-	if (listener->rx.options & RX_O_BOUND)
-		goto bound;
+	err = sockpair_bind_receiver(&listener->rx,
+	                             listener->rx.proto->accept, listener,
+	                             listener->bind_conf->bind_thread, &msg);
 
-	if (listener->rx.fd == -1) {
-		err |= ERR_FATAL | ERR_ALERT;
-		msg = "sockpair can be only used with inherited FDs";
-		goto err_return;
+	if (err != ERR_NONE) {
+		snprintf(errmsg, errlen, "%s", msg);
+		free(msg); msg = NULL;
+		return err;
 	}
-
-	if (fd >= global.maxsock) {
-		err |= ERR_FATAL | ERR_ALERT;
-		msg = "socket(): not enough free sockets, raise -n argument";
-		goto err_return;
-	}
-	if (fcntl(fd, F_SETFL, O_NONBLOCK) == -1) {
-		err |= ERR_FATAL | ERR_ALERT;
-		msg = "cannot make sockpair non-blocking";
-		goto err_return;
-	}
-	listener->rx.options |= RX_O_BOUND;
-
- bound:
 	listener->state = LI_LISTEN;
-
-	fd_insert(fd, listener, listener->rx.proto->accept,
-	          thread_mask(listener->bind_conf->bind_thread) & all_threads_mask);
-
 	return err;
 
  err_return:
 	if (msg && errlen)
-		snprintf(errmsg, errlen, "%s [fd %d]", msg, fd);
+		snprintf(errmsg, errlen, "%s [fd %d]", msg, listener->rx.fd);
 	return err;
 }
 
