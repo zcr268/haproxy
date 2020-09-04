@@ -941,6 +941,11 @@ struct sockaddr_storage *str2sa_range(const char *str, int *port, int *low, int 
 	if (ss.ss_family == AF_CUST_SOCKPAIR) {
 		char *endptr;
 
+		if (opts & (PA_O_SOURCE|PA_O_SERVER)) {
+			memprintf(err, "cannot use a file descriptor to connect to servers in '%s'\n", str);
+			goto out;
+		}
+
 		((struct sockaddr_in *)&ss)->sin_addr.s_addr = strtol(str2, &endptr, 10);
 		((struct sockaddr_in *)&ss)->sin_port = 0;
 
@@ -950,15 +955,37 @@ struct sockaddr_storage *str2sa_range(const char *str, int *port, int *low, int 
 		}
 	}
 	else if (ss.ss_family == AF_CUST_EXISTING_FD) {
+		socklen_t salen;
 		char *endptr;
+		int fd;
 
-		((struct sockaddr_in *)&ss)->sin_addr.s_addr = strtol(str2, &endptr, 10);
-		((struct sockaddr_in *)&ss)->sin_port = 0;
+		if (opts & (PA_O_SOURCE|PA_O_SERVER)) {
+			memprintf(err, "cannot use a file descriptor to connect to servers in '%s'\n", str);
+			goto out;
+		}
 
+		fd = strtol(str2, &endptr, 10);
 		if (!*str2 || *endptr) {
 			memprintf(err, "file descriptor '%s' is not a valid integer in '%s'\n", str2, str);
 			goto out;
 		}
+
+		if (opts & (PA_O_RECV|PA_O_BIND)) {
+			/* this FD must be a valid socket and we'll return the final protocol */
+			salen = sizeof(ss);
+			if (getsockname(fd, (struct sockaddr *)&ss, &salen) == -1) {
+				memprintf(err, "file descriptor '%d' is not a listening socket : %s.\n", fd, strerror(errno));
+				goto out;
+			}
+			/* the address family has now been replaced */
+			portl = porth = port = get_host_port(ss);
+		}
+		else {
+			/* this FD will be used for sending or writing, we'll use it as a raw FD */
+			((struct sockaddr_in *)&ss)->sin_addr.s_addr = fd;
+			((struct sockaddr_in *)&ss)->sin_port = 0;
+		}
+
 	}
 	else if (ss.ss_family == AF_UNIX) {
 		struct sockaddr_un *un = (struct sockaddr_un *)&ss;
