@@ -86,7 +86,13 @@
 #define DAY (24 * HOUR)
 
 /* Address parsing options for use with str2sa_range() */
-#define PA_O_RESOLVE            0x00000001
+#define PA_O_RESOLVE            0x00000001   /* do resolve the FQDN to an IP address */
+#define PA_O_BIND               0x00000002   /* the address will be used by a bind line to listen */
+#define PA_O_SEND               0x00000004   /* the address will be used to send datagrams */
+#define PA_O_RECV               0x00000008   /* the address will be used to receive datagrams */
+#define PA_O_SERVER             0x00000010   /* the address will be used by a server line to connect */
+#define PA_O_SOURCE             0x00000020   /* the address will be used by a source binding before connect */
+#define PA_O_WRITE              0x00000040   /* the address may be used as an fd number by a raw write() */
 
 /* UTF-8 decoder status */
 #define UTF8_CODE_OK       0x00
