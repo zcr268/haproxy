@@ -58,6 +58,7 @@
 
 #define H1C_F_DONT_READ      0x00100000 /* Don't read more data for now */
 #define H1C_F_DONT_RCVBUF    0x00200000 /* Don't call xprt recv_buf for now (happens during splicing) */
+#define H1C_F_IS_BACK        0x00400000 /* Set on outgoing connection */
 /*
  * H1 Stream flags (32 bits)
  */
@@ -274,7 +275,7 @@ static void h1_trace(enum trace_level level, uint64_t mask, const struct trace_s
 		return;
 
 	/* Display frontend/backend info by default */
-	chunk_appendf(&trace_buf, " : [%c]", (conn_is_back(h1c->conn) ? 'B' : 'F'));
+	chunk_appendf(&trace_buf, " : [%c]", ((h1c->flags & H1C_F_IS_BACK) ? 'B' : 'F'));
 
 	/* Display request and response states if h1s is defined */
 	if (h1s)
@@ -466,7 +467,7 @@ static void h1_refresh_timeout(struct h1c *h1c)
 			h1c->task->expire = tick_add(now_ms, h1c->shut_timeout);
 			task_queue(h1c->task);
 			TRACE_DEVEL("refreshing connection's timeout (half-closed)", H1_EV_H1C_SEND, h1c->conn);
-		} else if ((!h1c->h1s && !conn_is_back(h1c->conn)) || b_data(&h1c->obuf)) {
+		} else if ((!h1c->h1s && !(h1c->flags & H1C_F_IS_BACK)) || b_data(&h1c->obuf)) {
 			/* front connections waiting for a stream, as well as any connection with
 			 * pending data, need a timeout.
 			 */
@@ -487,7 +488,7 @@ static inline size_t h1s_data_pending(const struct h1s *h1s)
 {
 	const struct h1m *h1m;
 
-	h1m = conn_is_back(h1s->h1c->conn) ? &h1s->res : &h1s->req;
+	h1m = ((h1s->h1c->flags & H1C_F_IS_BACK) ? &h1s->res : &h1s->req);
 	if (h1m->state == H1_MSG_DONE)
 		return !(h1s->flags & H1S_F_PARSING_DONE);
 
@@ -563,7 +564,7 @@ static struct h1s *h1s_create(struct h1c *h1c, struct conn_stream *cs, struct se
 		h1s->flags |= H1S_F_NOT_FIRST;
 	h1c->flags &= ~(H1C_F_CS_IDLE|H1C_F_WAIT_NEXT_REQ);
 
-	if (!conn_is_back(h1c->conn)) {
+	if (!(h1c->flags & H1C_F_IS_BACK)) {
 		if (h1c->px->options2 & PR_O2_REQBUG_OK)
 			h1s->req.err_pos = -1;
 
@@ -663,7 +664,7 @@ static int h1_init(struct connection *conn, struct proxy *proxy, struct session 
 	h1c->wait_event.events   = 0;
 
 	if (conn_is_back(conn)) {
-		h1c->flags |= H1C_F_DONT_READ;
+		h1c->flags |= (H1C_F_IS_BACK|H1C_F_DONT_READ);
 		h1c->shut_timeout = h1c->timeout = proxy->timeout.server;
 		if (tick_isset(proxy->timeout.serverfin))
 			h1c->shut_timeout = proxy->timeout.serverfin;
@@ -979,7 +980,7 @@ static void h1_update_res_conn_value(struct h1s *h1s, struct h1m *h1m, struct is
 
 static void h1_process_input_conn_mode(struct h1s *h1s, struct h1m *h1m, struct htx *htx)
 {
-	if (!conn_is_back(h1s->h1c->conn))
+	if (!(h1s->h1c->flags & H1C_F_IS_BACK))
 		h1_set_cli_conn_mode(h1s, h1m);
 	else
 		h1_set_srv_conn_mode(h1s, h1m);
@@ -987,7 +988,7 @@ static void h1_process_input_conn_mode(struct h1s *h1s, struct h1m *h1m, struct 
 
 static void h1_process_output_conn_mode(struct h1s *h1s, struct h1m *h1m, struct ist *conn_val)
 {
-	if (!conn_is_back(h1s->h1c->conn))
+	if (!(h1s->h1c->flags & H1C_F_IS_BACK))
 		h1_set_cli_conn_mode(h1s, h1m);
 	else
 		h1_set_srv_conn_mode(h1s, h1m);
@@ -1119,7 +1120,7 @@ static void h1_set_req_tunnel_mode(struct h1s *h1s)
 	h1s->req.state = H1_MSG_TUNNEL;
 	TRACE_STATE("switch H1 request in tunnel mode", H1_EV_TX_DATA|H1_EV_TX_HDRS, h1s->h1c->conn, h1s);
 
-	if (!conn_is_back(h1s->h1c->conn)) {
+	if (!(h1s->h1c->flags & H1C_F_IS_BACK)) {
 		h1s->flags &= ~H1S_F_PARSING_DONE;
 		if (h1s->res.state < H1_MSG_DONE) {
 			h1s->h1c->flags |= H1C_F_DONT_READ;
@@ -1147,7 +1148,7 @@ static void h1_set_res_tunnel_mode(struct h1s *h1s)
 	h1s->res.state = H1_MSG_TUNNEL;
 	TRACE_STATE("switch H1 response in tunnel mode", H1_EV_TX_DATA|H1_EV_TX_HDRS, h1s->h1c->conn, h1s);
 
-	if (conn_is_back(h1s->h1c->conn)) {
+	if (h1s->h1c->flags & H1C_F_IS_BACK) {
 		h1s->flags &= ~H1S_F_PARSING_DONE;
 		/* On protocol switching, switch the request to tunnel mode if it is in
 		 * DONE state. Otherwise we will wait the end of the request to switch
@@ -1392,7 +1393,7 @@ static size_t h1_process_input(struct h1c *h1c, struct buffer *buf, size_t count
 	htx = htx_from_buf(buf);
 	TRACE_ENTER(H1_EV_RX_DATA, h1c->conn, h1s, htx, (size_t[]){count});
 
-	if (!conn_is_back(h1c->conn)) {
+	if (!(h1c->flags & H1C_F_IS_BACK)) {
 		h1m = &h1s->req;
 		errflag = H1S_F_REQ_ERROR;
 	}
@@ -1548,7 +1549,7 @@ static size_t h1_process_output(struct h1c *h1c, struct buffer *buf, size_t coun
 		goto end;
 	}
 
-	if (!conn_is_back(h1c->conn)) {
+	if (!(h1c->flags & H1C_F_IS_BACK)) {
 		h1m = &h1s->res;
 		errflag = H1S_F_RES_ERROR;
 	}
@@ -2029,8 +2030,8 @@ static int h1_recv(struct h1c *h1c)
 		b_slow_realign(&h1c->ibuf, trash.area, 0);
 
 	/* avoid useless reads after first responses */
-	if (h1s && ((!conn_is_back(conn) && h1s->req.state == H1_MSG_RQBEFORE) ||
-		    (conn_is_back(conn) && h1s->res.state == H1_MSG_RPBEFORE)))
+	if (h1s && ((!(h1c->flags & H1C_F_IS_BACK) && h1s->req.state == H1_MSG_RQBEFORE) ||
+		    ((h1c->flags & H1C_F_IS_BACK) && h1s->res.state == H1_MSG_RPBEFORE)))
 		flags |= CO_RFL_READ_ONCE;
 
 	max = buf_room_for_htx_data(&h1c->ibuf);
@@ -2169,7 +2170,7 @@ static int h1_process(struct h1c * h1c)
 		if (h1c->flags & (H1C_F_CS_ERROR|H1C_F_CS_SHUTDOWN) ||
 		    conn->flags & (CO_FL_ERROR|CO_FL_SOCK_RD_SH|CO_FL_SOCK_WR_SH))
 			goto release;
-		if (!conn_is_back(conn) && (h1c->flags & H1C_F_CS_IDLE)) {
+		if (!(h1c->flags & H1C_F_IS_BACK) && (h1c->flags & H1C_F_CS_IDLE)) {
 			TRACE_STATE("K/A incoming connection, create new H1 stream", H1_EV_H1C_WAKE, conn);
 			if (!h1s_create(h1c, NULL, NULL))
 				goto release;
@@ -2438,7 +2439,7 @@ static void h1_detach(struct conn_stream *cs)
 	is_not_first = h1s->flags & H1S_F_NOT_FIRST;
 	h1s_destroy(h1s);
 
-	if (conn_is_back(h1c->conn) && (h1c->flags & H1C_F_CS_IDLE)) {
+	if ((h1c->flags & H1C_F_IS_BACK) && (h1c->flags & H1C_F_CS_IDLE)) {
 		/* If there are any excess server data in the input buffer,
 		 * release it and close the connection ASAP (some data may
 		 * remain in the output buffer). This happens if a server sends
@@ -2662,7 +2663,7 @@ static size_t h1_rcv_buf(struct conn_stream *cs, struct buffer *buf, size_t coun
 {
 	struct h1s *h1s = cs->ctx;
 	struct h1c *h1c = h1s->h1c;
-	struct h1m *h1m = (!conn_is_back(cs->conn) ? &h1s->req : &h1s->res);
+	struct h1m *h1m = (!(h1c->flags & H1C_F_IS_BACK) ? &h1s->req : &h1s->res);
 	size_t ret = 0;
 
 	TRACE_ENTER(H1_EV_STRM_RECV, h1c->conn, h1s, 0, (size_t[]){count});
@@ -2743,23 +2744,24 @@ static size_t h1_snd_buf(struct conn_stream *cs, struct buffer *buf, size_t coun
 static int h1_rcv_pipe(struct conn_stream *cs, struct pipe *pipe, unsigned int count)
 {
 	struct h1s *h1s = cs->ctx;
-	struct h1m *h1m = (!conn_is_back(cs->conn) ? &h1s->req : &h1s->res);
+	struct h1c *h1c = h1s->h1c;
+	struct h1m *h1m = (!(h1c->flags & H1C_F_IS_BACK) ? &h1s->req : &h1s->res);
 	int ret = 0;
 
 	TRACE_ENTER(H1_EV_STRM_RECV, cs->conn, h1s, 0, (size_t[]){count});
 
 	if ((h1m->flags & H1_MF_CHNK) || (h1m->state != H1_MSG_DATA && h1m->state != H1_MSG_TUNNEL)) {
-		h1s->h1c->flags &= ~H1C_F_DONT_RCVBUF;
+		h1c->flags &= ~H1C_F_DONT_RCVBUF;
 		TRACE_STATE("Allow xprt rcv_buf on !(msg_data|msg_tunnel)", H1_EV_STRM_RECV, cs->conn, h1s);
-		if (!(h1s->h1c->wait_event.events & SUB_RETRY_RECV)) {
+		if (!(h1c->wait_event.events & SUB_RETRY_RECV)) {
 			TRACE_STATE("restart receiving data, subscribing", H1_EV_STRM_RECV, cs->conn, h1s);
-			cs->conn->xprt->subscribe(cs->conn, cs->conn->xprt_ctx, SUB_RETRY_RECV, &h1s->h1c->wait_event);
+			cs->conn->xprt->subscribe(cs->conn, cs->conn->xprt_ctx, SUB_RETRY_RECV, &h1c->wait_event);
 		}
 		goto end;
 	}
 
-	if (!(h1s->h1c->flags & H1C_F_DONT_RCVBUF)) {
-		h1s->h1c->flags |= H1C_F_DONT_RCVBUF;
+	if (!(h1c->flags & H1C_F_DONT_RCVBUF)) {
+		h1c->flags |= H1C_F_DONT_RCVBUF;
 		TRACE_STATE("Block xprt rcv_buf to perform splicing", H1_EV_STRM_RECV, cs->conn, h1s);
 	}
 	if (h1s_data_pending(h1s)) {
@@ -2767,7 +2769,7 @@ static int h1_rcv_pipe(struct conn_stream *cs, struct pipe *pipe, unsigned int c
 		goto end;
 	}
 
-	if (!h1_recv_allowed(h1s->h1c)) {
+	if (!h1_recv_allowed(h1c)) {
 		TRACE_DEVEL("leaving on !recv_allowed", H1_EV_STRM_RECV, cs->conn, h1s);
 		goto end;
 	}
@@ -2778,7 +2780,7 @@ static int h1_rcv_pipe(struct conn_stream *cs, struct pipe *pipe, unsigned int c
 	if (h1m->state == H1_MSG_DATA && ret >= 0) {
 		h1m->curr_len -= ret;
 		if (!h1m->curr_len) {
-			h1s->h1c->flags &= ~H1C_F_DONT_RCVBUF;
+			h1c->flags &= ~H1C_F_DONT_RCVBUF;
 			TRACE_STATE("Allow xprt rcv_buf on !curr_len", H1_EV_STRM_RECV, cs->conn, h1s);
 		}
 	}
@@ -2786,14 +2788,14 @@ static int h1_rcv_pipe(struct conn_stream *cs, struct pipe *pipe, unsigned int c
   end:
 	if (conn_xprt_read0_pending(cs->conn)) {
 		h1s->flags |= H1S_F_REOS;
-		h1s->h1c->flags &= ~H1C_F_DONT_RCVBUF;
+		h1c->flags &= ~H1C_F_DONT_RCVBUF;
 		TRACE_STATE("Allow xprt rcv_buf on read0", H1_EV_STRM_RECV, cs->conn, h1s);
 	}
 
 	if ((h1s->flags & H1S_F_REOS) ||
 	    (h1m->state != H1_MSG_TUNNEL && h1m->state != H1_MSG_DATA) ||
 	    (h1m->state == H1_MSG_DATA && !h1m->curr_len)) {
-		TRACE_STATE("notify the mux can't use splicing anymore", H1_EV_STRM_RECV, h1s->h1c->conn, h1s);
+		TRACE_STATE("notify the mux can't use splicing anymore", H1_EV_STRM_RECV, h1c->conn, h1s);
 		cs->flags &= ~CS_FL_MAY_SPLICE;
 	}
 
