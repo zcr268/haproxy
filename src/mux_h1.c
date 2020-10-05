@@ -481,21 +481,27 @@ static int h1_avail_streams(struct connection *conn)
 static void h1_refresh_timeout(struct h1c *h1c)
 {
 	if (h1c->task) {
-		h1c->task->expire = TICK_ETERNITY;
-		if (h1c->flags & H1C_F_CS_SHUTDOWN) {
+		if (!(h1c->flags & H1C_F_CS_ALIVE) || (h1c->flags & H1C_F_CS_SHUTDOWN)) {
 			/* half-closed or dead connections : switch to clientfin/serverfin
 			 * timeouts so that we don't hang too long on clients that have
 			 * gone away (especially in tunnel mode).
 			 */
 			h1c->task->expire = tick_add(now_ms, h1c->shut_timeout);
-			task_queue(h1c->task);
-			TRACE_DEVEL("refreshing connection's timeout (dead or half-closed)", H1_EV_H1C_SEND, h1c->conn);
-		} else if ((!h1c->h1s && !(h1c->flags & H1C_F_IS_BACK))) {
-			/* front connections waiting for a stream need a timeout. */
-			h1c->task->expire = tick_add(now_ms, h1c->timeout);
-			task_queue(h1c->task);
-			TRACE_DEVEL("refreshing connection's timeout", H1_EV_H1C_SEND, h1c->conn);
+			TRACE_DEVEL("refreshing connection's timeout (dead or half-closed)", H1_EV_H1C_SEND|H1_EV_H1C_RECV, h1c->conn);
 		}
+		else if (!(h1c->flags & H1C_F_IS_BACK) && (h1c->flags & (H1C_F_CS_IDLE|H1C_F_CS_EMBRYIONIC))) {
+			/* alive front connections with no conn-stream attached */
+			h1c->task->expire = tick_add(now_ms, h1c->timeout);
+			TRACE_DEVEL("refreshing connection's timeout (alive front h1c without a CS)", H1_EV_H1C_SEND|H1_EV_H1C_RECV, h1c->conn);
+		}
+		else  {
+			/* alive back connections of front connections with a conn-stream attached */
+			h1c->task->expire = TICK_ETERNITY;
+			TRACE_DEVEL("no connection timeout (alive back h1c or front h1c with a CS)", H1_EV_H1C_SEND|H1_EV_H1C_RECV, h1c->conn);
+		}
+
+		TRACE_DEVEL("new expiration date", H1_EV_H1C_SEND|H1_EV_H1C_RECV, h1c->conn, 0, 0, (size_t[]){h1c->task->expire});
+		task_queue(h1c->task);
 	}
 }
 /*****************************************************************/
