@@ -837,7 +837,7 @@ OBJS = src/mux_fcgi.o src/mux_h1.o src/mux_h2.o src/backend.o                 \
        src/eb32tree.o src/ebtree.o src/dgram.o src/proto_udp.o                \
        src/hpack-huff.o src/cfgparse-tcp.o src/base64.o src/version.o         \
        src/cfgparse-unix.o src/sock.o src/sock_inet.o src/sock_unix.o         \
-       src/fix.o
+       src/fix.o src/mqtt.o
 
 ifneq ($(TRACE),)
 OBJS += src/calltrace.o
