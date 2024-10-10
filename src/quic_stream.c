@@ -128,15 +128,14 @@ void qc_stream_desc_release(struct qc_stream_desc *stream,
 		if (final_size < tail_offset)
 			b_sub(buf, tail_offset - final_size);
 
-		if (!b_data(buf)) {
-			/* This will ensure notify_room is triggered. */
+		/* Release active buffer, or delete it immediatly if there is
+		 * no data to acknowledge. Both functions will reset active
+		 * buf pointer and invoke <notify_room> if necessary.
+		 */
+		if (!b_data(buf))
 			qc_stream_buf_free(stream, &stream_buf);
-		}
-		else if (stream->notify_room && b_room(buf)) {
-			stream->notify_room(stream, b_room(buf));
-		}
-
-		stream->buf = NULL;
+		else
+			qc_stream_buf_release(stream);
 	}
 
 	if (qc_stream_desc_done(stream)) {
@@ -178,7 +177,7 @@ static int qc_stream_buf_store_ack(struct qc_stream_buf *buf,
 		ack_less = eb64_entry(less, struct qc_stream_ack, offset_node);
 
 	/* Ensure that offset:len range has not been already acknowledged, at least partially. */
-	if ((ack_more && offset == ack_more->offset_node.key && offset + len <= ack_more->offset_node.key) ||
+	if ((ack_more && offset == ack_more->offset_node.key && offset + len <= ack_more->offset_node.key + ack_more->len) ||
 	    (ack_less && ack_less->offset_node.key + ack_less->len >= offset + len)) {
 		newly_acked = 0;
 		goto end;
